@@ -1,5 +1,7 @@
 # repo 指南
 
+**重要：未经我明确要求，不得执行提交（commit）、推送（push）、同步等任何版本控制操作。**
+
 ## 项目概述
 
 单模块 Android 应用（`com.mcn.fix`），将网易云音乐 NCM 文件转换为 flac/mp3/m4a/ogg/wav。
