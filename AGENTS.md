@@ -1,7 +1,5 @@
 # repo 指南
 
-**重要：未经我明确要求，不得执行提交（commit）、推送（push）、同步等任何版本控制操作。**
-
 ## 项目概述
 
 单模块 Android 应用（`com.mcn.fix`），将网易云音乐 NCM 文件转换为 flac/mp3/m4a/ogg/wav。
@@ -57,6 +55,7 @@ ncm/
 - **`gradle.properties` 非常规设置**：`android.suppressUnsupportedCompileSdk=37`、`android.disableAarMetadataCheck=true`、`android.overridePathCheck=true`。编译 SDK 37 是预览版，需这些标志抑制错误。
 - **禁止升级 AGP**：AGP 8.13.2 已是对 compileSdk 37（预览版）支持最宽松的版本。升级到 8.14+ 可能使上述抑制标志失效，导致构建失败。等 compileSdk 37 成为稳定版或降回 36 后再考虑升级。
 - **元数据覆盖**：解密输出所有格式都保留封面、标题、艺术家、专辑信息。MP3 写 ID3v2，FLAC 写 Vorbis Comment + 封面，M4A 写 iTunes ilst 原子。OGG/WAV 保持原始数据不变。
+- **禁止擅自提交/推送**：没有用户明确要求，不得执行任何 `git commit`、`git push`、提交代码或同步远程仓库的操作。
 
 ## UI 惯例
 
