@@ -43,4 +43,15 @@
     <string name="select_unconverted">仅未解密</string>
     <string name="remember_last_dir">记住上次目录</string>
     <string name="remember_last_dir_summary">启动时自动恢复上次使用的目录</string>
+    <string name="about_title">关于</string>
+    <string name="about_github">GitHub</string>
+    <string name="about_github_desc">在 GitHub 上查看源代码</string>
+    <string name="about_blend_version">版本 %1$s (%2$d)</string>
+    <string name="predictive_back_title">预测返回手势</string>
+    <string name="predictive_back_summary">从屏幕边缘滑动返回</string>
+    <string name="navigation_and_animation">导航与动画</string>
+    <string name="top_bar_blur_title">顶栏模糊</string>
+    <string name="top_bar_blur_summary">为顶部应用栏应用模糊效果</string>
+    <string name="floating_bottom_bar_title">悬浮底栏</string>
+    <string name="floating_bottom_bar_summary">悬浮药丸状导航栏</string>
 </resources>

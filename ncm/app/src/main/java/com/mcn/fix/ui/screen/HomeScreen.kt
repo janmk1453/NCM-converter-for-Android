@@ -33,8 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,6 +78,10 @@ import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.popup.OverlayDropdownPopup
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
@@ -92,6 +98,7 @@ fun HomeScreen(
     homeState: HomeState,
     concurrency: Int = 4,
     deleteAfterDecrypt: Boolean = false,
+    topBarBlurEnabled: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -210,9 +217,28 @@ fun HomeScreen(
         }
     }
 
+    val shaderSupported = isRuntimeShaderSupported() && android.os.Build.VERSION.SDK_INT >= 33
+    val topBarBackdrop = if (topBarBlurEnabled && shaderSupported) {
+        rememberLayerBackdrop { drawContent() }
+    } else null
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            SmallTopAppBar(title = stringResource(R.string.home))
+            Box(
+                modifier = Modifier.then(
+                    if (topBarBackdrop != null) Modifier.textureBlur(
+                        backdrop = topBarBackdrop,
+                        shape = RoundedCornerShape(0.dp),
+                        blurRadius = 25f,
+                        colors = BlurDefaults.blurColors(),
+                    ) else Modifier
+                ),
+            ) {
+                SmallTopAppBar(
+                    title = stringResource(R.string.home),
+                    color = if (topBarBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                )
+            }
 
             Row(
                 modifier = Modifier

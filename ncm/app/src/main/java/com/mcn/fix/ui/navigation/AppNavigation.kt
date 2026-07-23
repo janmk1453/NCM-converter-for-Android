@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.view.View
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -11,7 +14,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -30,12 +32,17 @@ import androidx.navigationevent.NavigationEventDispatcherOwner
 import androidx.navigationevent.setViewTreeNavigationEventDispatcherOwner
 import com.mcn.fix.R
 import com.mcn.fix.data.model.NcmFileInfo
+import com.mcn.fix.ui.component.FloatingBottomBar
+import com.mcn.fix.ui.component.FloatingBottomBarItem
+import com.mcn.fix.ui.component.FloatingBottomBarMode
 import com.mcn.fix.ui.screen.AboutScreen
 import com.mcn.fix.ui.screen.HomeScreen
 import com.mcn.fix.ui.screen.SettingsScreen
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Scaffold
+
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Settings
@@ -69,6 +76,9 @@ fun MainPage() {
     var rememberLastDir by rememberSaveable { mutableStateOf(prefs.getBoolean("remember_last_dir", true)) }
     var concurrency by rememberSaveable { mutableIntStateOf(prefs.getInt("concurrency", 4)) }
     var deleteAfterDecrypt by rememberSaveable { mutableStateOf(prefs.getBoolean("delete_after_decrypt", false)) }
+    var predictiveBackEnabled by rememberSaveable { mutableStateOf(prefs.getBoolean("predictive_back", false)) }
+    var topBarBlurEnabled by rememberSaveable { mutableStateOf(prefs.getBoolean("top_bar_blur", false)) }
+    var floatingBottomBarEnabled by rememberSaveable { mutableStateOf(prefs.getBoolean("floating_bottom_bar", false)) }
 
     val homeState = remember {
         HomeState(
@@ -88,10 +98,13 @@ fun MainPage() {
         }
     }
 
-    LaunchedEffect(concurrency, deleteAfterDecrypt) {
+    LaunchedEffect(concurrency, deleteAfterDecrypt, predictiveBackEnabled, topBarBlurEnabled, floatingBottomBarEnabled) {
         prefs.edit()
             .putInt("concurrency", concurrency)
             .putBoolean("delete_after_decrypt", deleteAfterDecrypt)
+            .putBoolean("predictive_back", predictiveBackEnabled)
+            .putBoolean("top_bar_blur", topBarBlurEnabled)
+            .putBoolean("floating_bottom_bar", floatingBottomBarEnabled)
             .apply()
     }
 
@@ -115,24 +128,24 @@ fun MainPage() {
     }
 
     MiuixTheme(controller = controller) {
-        if (showAbout) {
-            AboutScreen(onBack = { showAbout = false })
-        } else {
+        Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
                 bottomBar = {
-                    NavigationBar {
-                        NavigationBarItem(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            icon = MiuixIcons.Home,
-                            label = stringResource(R.string.home),
-                        )
-                        NavigationBarItem(
-                            selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            icon = MiuixIcons.Settings,
-                            label = stringResource(R.string.settings),
-                        )
+                    if (!floatingBottomBarEnabled) {
+                        NavigationBar {
+                            NavigationBarItem(
+                                selected = selectedTab == 0,
+                                onClick = { selectedTab = 0 },
+                                icon = MiuixIcons.Home,
+                                label = stringResource(R.string.home),
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 1,
+                                onClick = { selectedTab = 1 },
+                                icon = MiuixIcons.Settings,
+                                label = stringResource(R.string.settings),
+                            )
+                        }
                     }
                 },
             ) { innerPadding ->
@@ -156,6 +169,7 @@ fun MainPage() {
                             homeState = homeState,
                             concurrency = concurrency,
                             deleteAfterDecrypt = deleteAfterDecrypt,
+                            topBarBlurEnabled = topBarBlurEnabled,
                         )
                         1 -> SettingsScreen(
                             contentPadding = innerPadding,
@@ -174,10 +188,48 @@ fun MainPage() {
                             onConcurrencyChange = { concurrency = it },
                             deleteAfterDecrypt = deleteAfterDecrypt,
                             onDeleteAfterDecryptChange = { deleteAfterDecrypt = it },
+                            predictiveBackEnabled = predictiveBackEnabled,
+                            onPredictiveBackEnabledChange = { predictiveBackEnabled = it },
+                            topBarBlurEnabled = topBarBlurEnabled,
+                            onTopBarBlurEnabledChange = { topBarBlurEnabled = it },
+                            floatingBottomBarEnabled = floatingBottomBarEnabled,
+                            onFloatingBottomBarEnabledChange = { floatingBottomBarEnabled = it },
                         )
                     }
                 }
             }
+
+            if (floatingBottomBarEnabled) {
+                FloatingBottomBar(
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    selectedIndex = { selectedTab },
+                    onSelected = { selectedTab = it },
+                    backdrop = null,
+                    tabsCount = 2,
+                    mode = FloatingBottomBarMode.None,
+                ) {
+                    FloatingBottomBarItem(
+                        onClick = { selectedTab = 0 },
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Home,
+                            contentDescription = stringResource(R.string.home),
+                        )
+                    }
+                    FloatingBottomBarItem(
+                        onClick = { selectedTab = 1 },
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Settings,
+                            contentDescription = stringResource(R.string.settings),
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showAbout) {
+            AboutScreen(onBack = { showAbout = false }, predictiveBackEnabled = predictiveBackEnabled)
         }
     }
 }
