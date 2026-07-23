@@ -1,5 +1,6 @@
 package com.mcn.fix.ui.screen
 
+import android.content.Context
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -10,18 +11,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.mcn.fix.R
 import com.mcn.fix.ui.component.CardItem
 import com.mcn.fix.ui.component.CardSegment
 import com.mcn.fix.ui.component.groupedCardItems
+
 import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -35,9 +36,13 @@ fun SettingsScreen(
     themeMode: Int,
     onThemeModeChange: (Int) -> Unit,
     onNavigateToAbout: () -> Unit,
+    rememberLastDir: Boolean,
+    onRememberLastDirChange: (Boolean) -> Unit,
+    concurrency: Int = 4,
+    onConcurrencyChange: (Int) -> Unit = {},
+    deleteAfterDecrypt: Boolean = false,
+    onDeleteAfterDecryptChange: (Boolean) -> Unit = {},
 ) {
-    var deleteAfterDecrypt by remember { mutableStateOf(false) }
-    var concurrency by remember { mutableIntStateOf(4) }
 
     val themeFollowSystem = stringResource(R.string.theme_follow_system)
     val themeLight = stringResource(R.string.theme_light)
@@ -53,18 +58,22 @@ fun SettingsScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         SmallTopAppBar(title = stringResource(R.string.settings))
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = contentPadding.calculateBottomPadding())
-                .padding(horizontal = 12.dp),
-        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .overScrollVertical()
+                    .padding(bottom = contentPadding.calculateBottomPadding())
+                    .padding(horizontal = 12.dp),
+            ) {
             item {
                 Spacer(Modifier.height(12.dp))
             }
 
             item {
-                SmallTitle(text = stringResource(R.string.conversion_settings))
+                SmallTitle(
+                    text = stringResource(R.string.conversion_settings),
+                    insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp),
+                )
             }
 
             groupedCardItems(
@@ -74,7 +83,15 @@ fun SettingsScreen(
                         SwitchPreference(
                             title = stringResource(R.string.delete_after_decrypt),
                             checked = deleteAfterDecrypt,
-                            onCheckedChange = { deleteAfterDecrypt = it },
+                            onCheckedChange = onDeleteAfterDecryptChange,
+                        )
+                    },
+                    CardItem("remember_dir") {
+                        SwitchPreference(
+                            title = stringResource(R.string.remember_last_dir),
+                            summary = stringResource(R.string.remember_last_dir_summary),
+                            checked = rememberLastDir,
+                            onCheckedChange = onRememberLastDirChange,
                         )
                     },
                     CardItem("concurrency") {
@@ -86,7 +103,7 @@ fun SettingsScreen(
                             showKeyPoints = true,
                             keyPoints = listOf(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f),
                             valueText = concurrency.toString(),
-                            onValueChange = { concurrency = it.toInt() },
+                            onValueChange = { onConcurrencyChange(it.toInt()) },
                         )
                     },
                 ),
@@ -94,7 +111,10 @@ fun SettingsScreen(
             )
 
             item {
-                SmallTitle(text = stringResource(R.string.display))
+                SmallTitle(
+                    text = stringResource(R.string.display),
+                    insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp),
+                )
             }
 
             item {
@@ -117,7 +137,10 @@ fun SettingsScreen(
             }
 
             item {
-                SmallTitle(text = stringResource(R.string.about))
+                SmallTitle(
+                    text = stringResource(R.string.about),
+                    insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp),
+                )
             }
 
             item {

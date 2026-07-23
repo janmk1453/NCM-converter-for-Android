@@ -1,11 +1,11 @@
 package com.mcn.fix.ui.screen
 
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,37 +15,41 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.mcn.fix.R
 import com.mcn.fix.data.DecryptManager
 import com.mcn.fix.data.model.NcmFileInfo
 import com.mcn.fix.ui.component.CardSegment
 import com.mcn.fix.ui.navigation.HomeState
 import com.mcn.fix.util.FileUtils
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Button
@@ -55,6 +59,7 @@ import top.yukonga.miuix.kmp.basic.DropdownColors
 import top.yukonga.miuix.kmp.basic.DropdownDefaults
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InputField
@@ -64,12 +69,14 @@ import top.yukonga.miuix.kmp.basic.SearchBarDefaults
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.popup.OverlayDropdownPopup
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.icon.extended.Sort
+import top.yukonga.miuix.kmp.popup.OverlayDropdownPopup
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 enum class SortOrder(val labelRes: Int) {
@@ -83,6 +90,8 @@ enum class SortOrder(val labelRes: Int) {
 fun HomeScreen(
     contentPadding: PaddingValues,
     homeState: HomeState,
+    concurrency: Int = 4,
+    deleteAfterDecrypt: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -98,11 +107,32 @@ fun HomeScreen(
     var showProgressDialog by remember { mutableStateOf(false) }
     var isLoadingFiles by remember { mutableStateOf(false) }
 
+    var decryptJob: Job? by remember { mutableStateOf(null) }
     var completedTotal by remember { mutableStateOf(0) }
+    var decryptStartTime by remember { mutableLongStateOf(0L) }
+    var elapsedText by remember { mutableStateOf("00:00") }
     LaunchedEffect(decryptProgress.total) {
         if (decryptProgress.total > 0 && completedTotal != decryptProgress.total) {
             showProgressDialog = true
             completedTotal = decryptProgress.total
+            decryptStartTime = System.currentTimeMillis()
+        }
+    }
+
+    LaunchedEffect(showProgressDialog) {
+        if (!showProgressDialog) {
+            decryptStartTime = 0L
+            elapsedText = "00:00"
+            return@LaunchedEffect
+        }
+        while (showProgressDialog) {
+            if (decryptStartTime > 0L) {
+                val elapsed = (System.currentTimeMillis() - decryptStartTime) / 1000
+                val min = elapsed / 60
+                val sec = elapsed % 60
+                elapsedText = "${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}"
+            }
+            delay(1000)
         }
     }
 
@@ -131,36 +161,52 @@ fun HomeScreen(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
         uri?.let {
-            isLoadingFiles = true
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) { }
+            homeState.scanVersion++
             homeState.sourceDirUri = it
             homeState.decryptFinished = false
-            scope.launch {
-                try {
-                    val files = withContext(Dispatchers.IO) { FileUtils.listNcmFiles(context, it) }
-                    homeState.fileList.clear()
-                    homeState.fileList.addAll(files)
-                    homeState.allChecked = true
-                    if (homeState.outputDirUri != null) {
-                        val outputNames = FileUtils.listOutputFileNames(context, homeState.outputDirUri!!)
-                        uncheckConvertedFiles(homeState, outputNames)
-                    }
-                } catch (e: Exception) {
-                    Toast.makeText(context, e.message ?: "Error", Toast.LENGTH_SHORT).show()
-                } finally {
-                    isLoadingFiles = false
-                }
-            }
         }
     }
 
     val outputDirLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
-        homeState.outputDirUri = uri
-        homeState.decryptFinished = false
-        if (uri != null && homeState.fileList.isNotEmpty()) {
-            val outputNames = FileUtils.listOutputFileNames(context, uri)
-            uncheckConvertedFiles(homeState, outputNames)
+        uri?.let {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            } catch (_: Exception) { }
+            homeState.outputDirUri = it
+            homeState.decryptFinished = false
+            if (homeState.fileList.isNotEmpty()) {
+                val outputNames = FileUtils.listOutputFileNames(context, it)
+                uncheckConvertedFiles(homeState, outputNames)
+            }
+        }
+    }
+
+    LaunchedEffect(homeState.sourceDirUri, homeState.scanVersion) {
+        val uri = homeState.sourceDirUri ?: return@LaunchedEffect
+        isLoadingFiles = true
+        try {
+            val files = withContext(Dispatchers.IO) { FileUtils.listNcmFiles(context, uri) }
+            homeState.fileList.clear()
+            homeState.fileList.addAll(files)
+            homeState.allChecked = true
+            if (homeState.outputDirUri != null) {
+                val outputNames = FileUtils.listOutputFileNames(context, homeState.outputDirUri!!)
+                uncheckConvertedFiles(homeState, outputNames)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, e.message ?: "Error", Toast.LENGTH_SHORT).show()
+        } finally {
+            isLoadingFiles = false
         }
     }
 
@@ -270,7 +316,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MiuixTheme.colorScheme.surface)
-                    .padding(start = 12.dp, end = 12.dp, top = 12.dp),
+                    .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Card(
@@ -320,7 +366,13 @@ fun HomeScreen(
                 }
             }
 
+            HorizontalDivider(
+                color = MiuixTheme.colorScheme.dividerLine.copy(alpha = 0.3f),
+            )
+
+            val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
@@ -344,7 +396,10 @@ fun HomeScreen(
 
                 if (homeState.fileList.isNotEmpty()) {
                     item {
-                        SmallTitle(text = stringResource(R.string.file_list))
+                        SmallTitle(
+                            text = stringResource(R.string.file_list),
+                            insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp),
+                        )
                     }
 
                     if (displayList.isEmpty() && searchQuery.isNotBlank()) {
@@ -406,12 +461,34 @@ fun HomeScreen(
             Button(
                 onClick = {
                     if (homeState.outputDirUri != null) {
-                        scope.launch {
+                        decryptJob?.cancel()
+                        decryptJob = scope.launch {
                             homeState.decryptFinished = false
-                            decryptManager.decryptAll(
-                                files = homeState.fileList.toList(),
-                                outputDirUri = homeState.outputDirUri!!,
-                            )
+                            try {
+                                val results = decryptManager.decryptAll(
+                                    files = homeState.fileList.toList(),
+                                    outputDirUri = homeState.outputDirUri!!,
+                                    concurrency = concurrency,
+                                )
+                                if (deleteAfterDecrypt) {
+                                    withContext(Dispatchers.IO) {
+                                        results.filter { it.success }.forEach { result ->
+                                            val info = homeState.fileList.find { it.path == result.path }
+                                            info?.let {
+                                                try {
+                                                    FileUtils.deleteFile(context, Uri.parse(it.path))
+                                                } catch (_: Exception) { }
+                                            }
+                                        }
+                                    }
+                                    homeState.fileList.removeAll { info ->
+                                        results.any { it.success && it.path == info.path }
+                                    }
+                                }
+                            } catch (_: CancellationException) {
+                                decryptManager.cancel()
+                                return@launch
+                            }
                             homeState.decryptFinished = true
                         }
                     }
@@ -433,84 +510,72 @@ fun HomeScreen(
     }
 
     if (showProgressDialog && decryptProgress.total > 0) {
-        Dialog(
+        OverlayDialog(
+            title = if (decryptProgress.isRunning) {
+                stringResource(R.string.decrypting)
+            } else {
+                stringResource(R.string.decrypt_complete)
+            },
+            summary = "${decryptProgress.completed}/${decryptProgress.total}",
+            show = showProgressDialog,
             onDismissRequest = { },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable(enabled = false) { },
-                contentAlignment = Alignment.Center,
+            Column(
+                modifier = Modifier.heightIn(max = 500.dp),
             ) {
-                Card(
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp)
-                        .fillMaxWidth(),
+                if (decryptProgress.total > 0) {
+                    LinearProgressIndicator(
+                        progress = decryptProgress.completed.toFloat() / decryptProgress.total.toFloat(),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    )
+                }
+                val pct = (decryptProgress.completed * 100 / decryptProgress.total.coerceAtLeast(1))
+                Text(
+                    text = "$pct%",
+                    color = MiuixTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        Text(
-                            text = if (decryptProgress.isRunning) {
-                                stringResource(R.string.decrypting)
-                            } else {
-                                stringResource(R.string.decrypt_complete)
-                            },
-                            style = MiuixTheme.textStyles.title3,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "${decryptProgress.completed}/${decryptProgress.total}",
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        if (decryptProgress.total > 0) {
-                            LinearProgressIndicator(
-                                progress = decryptProgress.completed.toFloat() / decryptProgress.total.toFloat(),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (decryptProgress.total > 0) {
-                                val pct = (decryptProgress.completed * 100 / decryptProgress.total.coerceAtLeast(1))
-                                Text(
-                                    text = "$pct%",
-                                    color = MiuixTheme.colorScheme.primary,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            Text(
-                                text = "${stringResource(R.string.success_count, decryptProgress.success)}",
-                                color = MiuixTheme.colorScheme.primary,
-                            )
-                            Text(
-                                text = "${stringResource(R.string.failed_count, decryptProgress.failed)}",
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            )
-                        }
-                        Spacer(Modifier.height(20.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            Button(
-                                onClick = { showProgressDialog = false },
-                                colors = ButtonDefaults.buttonColorsPrimary(),
-                            ) {
-                                Text(stringResource(R.string.confirm))
-                            }
-                        }
-                    }
+                    Text(
+                        text = stringResource(R.string.success_count, decryptProgress.success),
+                        color = MiuixTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = stringResource(R.string.failed_count, decryptProgress.failed),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                }
+                if (decryptProgress.isRunning) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = elapsedText,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextButton(
+                        text = stringResource(R.string.cancel),
+                        enabled = decryptProgress.isRunning,
+                        onClick = {
+                            decryptJob?.cancel()
+                            decryptManager.cancel()
+                            showProgressDialog = false
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        text = stringResource(R.string.confirm),
+                        enabled = !decryptProgress.isRunning,
+                        onClick = { showProgressDialog = false },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                    )
                 }
             }
         }

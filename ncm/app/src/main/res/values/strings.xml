@@ -16,7 +16,7 @@
     <string name="choose_directory">Choose Directory</string>
     <string name="default_output_dir">Default Output Directory</string>
     <string name="delete_after_decrypt">Delete source after decrypt</string>
-    <string name="conversion_settings">Conversion Settings</string>
+    <string name="conversion_settings">Encryption Settings</string>
     <string name="concurrency">Concurrency</string>
     <string name="about">About</string>
     <string name="version">Version</string>
@@ -41,4 +41,6 @@
     <string name="scanning_files">Scanning files…</string>
     <string name="select_all_action">Select All</string>
     <string name="select_unconverted">Only Unconverted</string>
+    <string name="remember_last_dir">Remember last directory</string>
+    <string name="remember_last_dir_summary">Auto-restore last used directories on launch</string>
 </resources>

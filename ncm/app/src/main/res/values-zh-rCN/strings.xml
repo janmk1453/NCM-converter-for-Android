@@ -16,7 +16,7 @@
     <string name="choose_directory">选择目录</string>
     <string name="default_output_dir">默认输出目录</string>
     <string name="delete_after_decrypt">解密后删除源文件</string>
-    <string name="conversion_settings">转换设置</string>
+    <string name="conversion_settings">加密设置</string>
     <string name="concurrency">并发数</string>
     <string name="about">关于</string>
     <string name="version">版本</string>
@@ -41,4 +41,6 @@
     <string name="scanning_files">正在扫描文件…</string>
     <string name="select_all_action">全选</string>
     <string name="select_unconverted">仅未解密</string>
+    <string name="remember_last_dir">记住上次目录</string>
+    <string name="remember_last_dir_summary">启动时自动恢复上次使用的目录</string>
 </resources>

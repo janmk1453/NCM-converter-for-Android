@@ -47,6 +47,7 @@ commonMain/
 *.tmp
 *.swp
 # Note: AGENTS.md 和 UI 规范.md 是项目说明文件，保留提交
+模糊效果 _ Miuix.docx
 
 __pycache__/
 *.pyc

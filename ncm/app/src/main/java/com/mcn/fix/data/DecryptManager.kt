@@ -34,6 +34,7 @@ data class DecryptProgress(
 )
 
 data class FileResult(
+    val path: String,
     val fileName: String,
     val success: Boolean,
     val error: String? = null,
@@ -50,6 +51,10 @@ class DecryptManager(private val context: Context) {
 
     private val _progress = MutableStateFlow(DecryptProgress())
     val progress: StateFlow<DecryptProgress> = _progress.asStateFlow()
+
+    fun cancel() {
+        _progress.value = DecryptProgress()
+    }
 
     private val audioBufferSize = 64 * 1024
 
@@ -90,7 +95,7 @@ class DecryptManager(private val context: Context) {
 
                         result
                     } catch (e: Exception) {
-                        val result = FileResult(fileInfo.name, false, e.message)
+                        val result = FileResult(fileInfo.path, fileInfo.name, false, e.message)
                         failedCount++
                         results.add(result)
                         _progress.value = _progress.value.copy(
@@ -190,9 +195,9 @@ class DecryptManager(private val context: Context) {
                 audioRaf.close()
             }
 
-            return FileResult(fileInfo.name, true)
+            return FileResult(fileInfo.path, fileInfo.name, true)
         } catch (e: Exception) {
-            return FileResult(fileInfo.name, false, e.message ?: "Unknown error")
+            return FileResult(fileInfo.path, fileInfo.name, false, e.message ?: "Unknown error")
         } finally {
             tempFile.delete()
         }
