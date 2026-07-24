@@ -21,7 +21,7 @@ Release APK 位于 `app/build/outputs/apk/release/`，使用 debug keystore 签�
 
 - **UI**: Miuix KMP 0.9.3 + JetBrains Compose Multiplatform 1.11.1
 - **构建**: AGP 8.13.2, Kotlin 2.4.0, minSdk 33
-- **大小**: Release ≈ 3 MB（R8 混淆 + 资源压缩）
+- **大小**: Release ≈ 4 MB（R8 混淆 + 资源压缩）
 
 ## 许可证
 
