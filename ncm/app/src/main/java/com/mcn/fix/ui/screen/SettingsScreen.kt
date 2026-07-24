@@ -57,6 +57,12 @@ fun SettingsScreen(
 
     floatingBottomBarEnabled: Boolean = false,
     onFloatingBottomBarEnabledChange: (Boolean) -> Unit = {},
+    autoFillPureMusic: Boolean = true,
+    onAutoFillPureMusicChange: (Boolean) -> Unit = {},
+    autoFillConcurrency: Int = 4,
+    onAutoFillConcurrencyChange: (Int) -> Unit = {},
+    mixLyricsFromResults: Boolean = true,
+    onMixLyricsFromResultsChange: (Boolean) -> Unit = {},
 ) {
 
     val themeFollowSystem = stringResource(R.string.theme_follow_system)
@@ -202,6 +208,52 @@ fun SettingsScreen(
                             summary = stringResource(R.string.floating_bottom_bar_summary),
                             checked = floatingBottomBarEnabled,
                             onCheckedChange = onFloatingBottomBarEnabledChange,
+                        )
+                    },
+                ),
+                outerBottomPadding = 12.dp,
+            )
+
+            item {
+                Spacer(Modifier.height(12.dp))
+            }
+
+            item {
+                SmallTitle(
+                    text = stringResource(R.string.tag_settings),
+                    insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp),
+                )
+            }
+
+            groupedCardItems(
+                keyPrefix = "tag",
+                items = listOf(
+                    CardItem("pure_lyrics") {
+                        SwitchPreference(
+                            title = stringResource(R.string.auto_fill_pure_music_lyrics),
+                            summary = stringResource(R.string.auto_fill_pure_music_lyrics_summary),
+                            checked = autoFillPureMusic,
+                            onCheckedChange = onAutoFillPureMusicChange,
+                        )
+                    },
+                    CardItem("mix_lyrics") {
+                        SwitchPreference(
+                            title = stringResource(R.string.mix_lyrics_from_results),
+                            summary = stringResource(R.string.mix_lyrics_from_results_summary),
+                            checked = mixLyricsFromResults,
+                            onCheckedChange = onMixLyricsFromResultsChange,
+                        )
+                    },
+                    CardItem("concurrency") {
+                        SliderPreference(
+                            title = stringResource(R.string.auto_fill_concurrency),
+                            value = autoFillConcurrency.toFloat(),
+                            valueRange = 1f..8f,
+                            steps = 7,
+                            showKeyPoints = true,
+                            keyPoints = listOf(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f),
+                            valueText = autoFillConcurrency.toString(),
+                            onValueChange = { onAutoFillConcurrencyChange(it.toInt()) },
                         )
                     },
                 ),

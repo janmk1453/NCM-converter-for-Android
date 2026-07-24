@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">mcn转换器</string>
+    <string name="app_name">ncm转换器</string>
     <string name="home">首页</string>
     <string name="settings">设置</string>
     <string name="select_source_dir">源目录</string>
@@ -54,4 +54,60 @@
     <string name="top_bar_blur_summary">为顶部应用栏应用模糊效果</string>
     <string name="floating_bottom_bar_title">悬浮底栏</string>
     <string name="floating_bottom_bar_summary">悬浮药丸状导航栏</string>
+
+    <!-- Tag Editor -->
+    <string name="tag_editor">标签</string>
+    <string name="tag_select_dir">选择音频文件夹</string>
+    <string name="tag_no_files">选择一个文件夹来扫描音频文件</string>
+    <string name="tag_file_list">音频文件 (%d)</string>
+    <string name="tag_basic_info">基本信息</string>
+    <string name="tag_title">标题</string>
+    <string name="tag_artist">艺术家</string>
+    <string name="tag_album">专辑</string>
+    <string name="tag_genre">流派</string>
+    <string name="tag_year">年份</string>
+    <string name="tag_track_number">音轨号</string>
+    <string name="tag_lyrics">歌词</string>
+    <string name="tag_lyrics_hint">输入歌词…</string>
+    <string name="tag_cover">封面</string>
+    <string name="tag_change_cover">更换封面</string>
+    <string name="tag_remove_cover">移除封面</string>
+    <string name="tag_search_online">在线搜索</string>
+    <string name="tag_search_hint">搜索标题…</string>
+    <string name="tag_search">搜索</string>
+    <string name="tag_searching">搜索中…</string>
+    <string name="tag_apply">应用</string>
+    <string name="tag_save">保存</string>
+    <string name="tag_saving">保存中…</string>
+    <string name="tag_save_success">标签保存成功</string>
+    <string name="tag_save_failed">标签保存失败</string>
+    <string name="tag_reading">读取标签中…</string>
+    <string name="tag_unsaved_title">未保存的更改</string>
+    <string name="tag_unsaved_summary">您有未保存的更改。放弃还是保存？</string>
+    <string name="tag_discard">放弃</string>
+
+    <!-- Auto-fill -->
+    <string name="tag_settings">标签设置</string>
+    <string name="auto_fill_pure_music_lyrics">自动填充纯音乐歌词</string>
+    <string name="auto_fill_pure_music_lyrics_summary">未找到歌词时自动填入 "[00:00.00]纯音乐，请欣赏"</string>
+    <string name="tag_auto_fill">自动填充</string>
+    <string name="tag_auto_filling">正在填充… %d/%d</string>
+    <string name="tag_auto_fill_complete">填充完成：已更新 %d 个文件</string>
+    <string name="tag_auto_fill_skip">所有文件标签已完整</string>
+    <string name="auto_fill_concurrency">自动填充并发数</string>
+    <string name="mix_lyrics_from_results">混合搜索结果歌词</string>
+    <string name="mix_lyrics_from_results_summary">靠前结果没有歌词时从其他结果中获取</string>
+    <string name="tag_auto_fill_elapsed">耗时:</string>
+    <string name="tag_auto_fill_success">成功:</string>
+    <string name="tag_auto_fill_fail">失败:</string>
+    <string name="tag_auto_fill_skipped">跳过:</string>
+    <string name="search_source_all">全部</string>
+    <string name="search_source_netease">网易云</string>
+    <string name="search_source_qq">QQ音乐</string>
+    <string name="tag_select_files">选择</string>
+    <string name="tag_cancel_select">取消选择</string>
+    <string name="tag_batch_fill">批量填充</string>
+    <string name="tag_batch_fill_title">批量填充标签</string>
+    <string name="tag_batch_fill_fields">填充字段:</string>
+    <string name="tag_filter_hint">过滤文件名…</string>
 </resources>

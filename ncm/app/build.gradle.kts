@@ -13,8 +13,8 @@ android {
         applicationId = "com.mcn.fix"
         minSdk = 33
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.1.0"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -67,4 +67,5 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.documentfile)
     implementation(libs.navigationevent.android)
+    implementation(libs.jaudiotagger)
 }

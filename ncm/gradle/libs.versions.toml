@@ -8,6 +8,7 @@ coroutines = "1.9.0"
 immutable-collections = "0.3.8"
 activity-compose = "1.9.3"
 navigationevent = "1.1.2"
+jaudiotagger = "3.0.1"
 
 [libraries]
 miuix-ui = { group = "top.yukonga.miuix.kmp", name = "miuix-ui", version.ref = "miuix" }
@@ -23,6 +24,7 @@ coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutin
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
 documentfile = { group = "androidx.documentfile", name = "documentfile", version = "1.0.1" }
 navigationevent-android = { group = "androidx.navigationevent", name = "navigationevent-android", version.ref = "navigationevent" }
+jaudiotagger = { group = "net.jthink", name = "jaudiotagger", version.ref = "jaudiotagger" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

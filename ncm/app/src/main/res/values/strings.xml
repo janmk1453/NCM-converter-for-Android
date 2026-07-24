@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">MCN Converter</string>
+    <string name="app_name">ncm转换器</string>
     <string name="home">Home</string>
     <string name="settings">Settings</string>
     <string name="select_source_dir">Source Directory</string>
@@ -54,4 +54,60 @@
     <string name="top_bar_blur_summary">Applies blur effect to the top app bar</string>
     <string name="floating_bottom_bar_title">Floating bottom bar</string>
     <string name="floating_bottom_bar_summary">Floating pill-shaped navigation bar</string>
+
+    <!-- Tag Editor -->
+    <string name="tag_editor">Tags</string>
+    <string name="tag_select_dir">Select audio folder</string>
+    <string name="tag_no_files">Select a folder to scan for audio files</string>
+    <string name="tag_file_list">Audio files (%d)</string>
+    <string name="tag_basic_info">Basic Info</string>
+    <string name="tag_title">Title</string>
+    <string name="tag_artist">Artist</string>
+    <string name="tag_album">Album</string>
+    <string name="tag_genre">Genre</string>
+    <string name="tag_year">Year</string>
+    <string name="tag_track_number">Track</string>
+    <string name="tag_lyrics">Lyrics</string>
+    <string name="tag_lyrics_hint">Enter lyrics…</string>
+    <string name="tag_cover">Cover Art</string>
+    <string name="tag_change_cover">Change Cover</string>
+    <string name="tag_remove_cover">Remove Cover</string>
+    <string name="tag_search_online">Search Online</string>
+    <string name="tag_search_hint">Search title…</string>
+    <string name="tag_search">Search</string>
+    <string name="tag_searching">Searching…</string>
+    <string name="tag_apply">Apply</string>
+    <string name="tag_save">Save</string>
+    <string name="tag_saving">Saving…</string>
+    <string name="tag_save_success">Tags saved successfully</string>
+    <string name="tag_save_failed">Failed to save tags</string>
+    <string name="tag_reading">Reading tags…</string>
+    <string name="tag_unsaved_title">Unsaved changes</string>
+    <string name="tag_unsaved_summary">You have unsaved changes. Discard or save?</string>
+    <string name="tag_discard">Discard</string>
+
+    <!-- Auto-fill -->
+    <string name="tag_settings">Tag Settings</string>
+    <string name="auto_fill_pure_music_lyrics">Auto-fill pure music lyrics</string>
+    <string name="auto_fill_pure_music_lyrics_summary">Fill \"[00:00.00]纯音乐，请欣赏\" when no lyrics found</string>
+    <string name="tag_auto_fill">Auto-fill</string>
+    <string name="tag_auto_filling">Auto-filling… %d/%d</string>
+    <string name="tag_auto_fill_complete">Auto-fill done: %d updated</string>
+    <string name="tag_auto_fill_skip">No files need filling</string>
+    <string name="auto_fill_concurrency">Auto-fill concurrency</string>
+    <string name="mix_lyrics_from_results">Mix lyrics from results</string>
+    <string name="mix_lyrics_from_results_summary">Use lyrics from other results when top results have none</string>
+    <string name="tag_auto_fill_elapsed">Time:</string>
+    <string name="tag_auto_fill_success">OK:</string>
+    <string name="tag_auto_fill_fail">Fail:</string>
+    <string name="tag_auto_fill_skipped">Skip:</string>
+    <string name="search_source_all">All</string>
+    <string name="search_source_netease">NetEase</string>
+    <string name="search_source_qq">QQ Music</string>
+    <string name="tag_select_files">Select</string>
+    <string name="tag_cancel_select">Cancel</string>
+    <string name="tag_batch_fill">Batch fill</string>
+    <string name="tag_batch_fill_title">Batch fill tags</string>
+    <string name="tag_batch_fill_fields">Fields to fill:</string>
+    <string name="tag_filter_hint">Filter file names…</string>
 </resources>

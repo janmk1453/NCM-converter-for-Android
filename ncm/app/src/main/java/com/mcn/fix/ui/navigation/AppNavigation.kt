@@ -32,12 +32,14 @@ import androidx.navigationevent.NavigationEventDispatcherOwner
 import androidx.navigationevent.setViewTreeNavigationEventDispatcherOwner
 import com.mcn.fix.R
 import com.mcn.fix.data.model.NcmFileInfo
+import com.mcn.fix.data.tag.AudioFileEntry
 import com.mcn.fix.ui.component.FloatingBottomBar
 import com.mcn.fix.ui.component.FloatingBottomBarItem
 import com.mcn.fix.ui.component.FloatingBottomBarMode
 import com.mcn.fix.ui.screen.AboutScreen
 import com.mcn.fix.ui.screen.HomeScreen
 import com.mcn.fix.ui.screen.SettingsScreen
+import com.mcn.fix.ui.tag.TagScreen
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
@@ -45,6 +47,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Home
+import top.yukonga.miuix.kmp.icon.extended.Music
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -79,6 +82,11 @@ fun MainPage() {
     var predictiveBackEnabled by rememberSaveable { mutableStateOf(prefs.getBoolean("predictive_back", false)) }
     var topBarBlurEnabled by rememberSaveable { mutableStateOf(prefs.getBoolean("top_bar_blur", false)) }
     var floatingBottomBarEnabled by rememberSaveable { mutableStateOf(prefs.getBoolean("floating_bottom_bar", false)) }
+    var autoFillPureMusic by rememberSaveable { mutableStateOf(prefs.getBoolean("auto_fill_pure_music", true)) }
+    var autoFillConcurrency by rememberSaveable { mutableIntStateOf(prefs.getInt("auto_fill_concurrency", 4)) }
+    var mixLyricsFromResults by rememberSaveable { mutableStateOf(prefs.getBoolean("mix_lyrics_from_results", true)) }
+    val tagAudioFiles = remember { mutableStateListOf<AudioFileEntry>() }
+    var tagScanVersion by remember { mutableIntStateOf(0) }
 
     val homeState = remember {
         HomeState(
@@ -98,13 +106,16 @@ fun MainPage() {
         }
     }
 
-    LaunchedEffect(concurrency, deleteAfterDecrypt, predictiveBackEnabled, topBarBlurEnabled, floatingBottomBarEnabled) {
+    LaunchedEffect(concurrency, deleteAfterDecrypt, predictiveBackEnabled, topBarBlurEnabled, floatingBottomBarEnabled, autoFillPureMusic, autoFillConcurrency, mixLyricsFromResults) {
         prefs.edit()
             .putInt("concurrency", concurrency)
             .putBoolean("delete_after_decrypt", deleteAfterDecrypt)
             .putBoolean("predictive_back", predictiveBackEnabled)
             .putBoolean("top_bar_blur", topBarBlurEnabled)
             .putBoolean("floating_bottom_bar", floatingBottomBarEnabled)
+            .putBoolean("auto_fill_pure_music", autoFillPureMusic)
+            .putInt("auto_fill_concurrency", autoFillConcurrency)
+            .putBoolean("mix_lyrics_from_results", mixLyricsFromResults)
             .apply()
     }
 
@@ -142,6 +153,12 @@ fun MainPage() {
                             NavigationBarItem(
                                 selected = selectedTab == 1,
                                 onClick = { selectedTab = 1 },
+                                icon = MiuixIcons.Music,
+                                label = stringResource(R.string.tag_editor),
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 2,
+                                onClick = { selectedTab = 2 },
                                 icon = MiuixIcons.Settings,
                                 label = stringResource(R.string.settings),
                             )
@@ -171,7 +188,16 @@ fun MainPage() {
                             deleteAfterDecrypt = deleteAfterDecrypt,
                             topBarBlurEnabled = topBarBlurEnabled,
                         )
-                        1 -> SettingsScreen(
+                        1 -> TagScreen(
+                            contentPadding = innerPadding,
+                            autoFillPureMusic = autoFillPureMusic,
+                            autoFillConcurrency = autoFillConcurrency,
+                            mixLyricsFromResults = mixLyricsFromResults,
+                            tagAudioFiles = tagAudioFiles,
+                            tagScanVersion = tagScanVersion,
+                            onTagScanVersionChange = { tagScanVersion = it },
+                        )
+                        2 -> SettingsScreen(
                             contentPadding = innerPadding,
                             themeMode = themeMode,
                             onThemeModeChange = {
@@ -194,6 +220,12 @@ fun MainPage() {
                             onTopBarBlurEnabledChange = { topBarBlurEnabled = it },
                             floatingBottomBarEnabled = floatingBottomBarEnabled,
                             onFloatingBottomBarEnabledChange = { floatingBottomBarEnabled = it },
+                            autoFillPureMusic = autoFillPureMusic,
+                            onAutoFillPureMusicChange = { autoFillPureMusic = it },
+                            autoFillConcurrency = autoFillConcurrency,
+                            onAutoFillConcurrencyChange = { autoFillConcurrency = it },
+                            mixLyricsFromResults = mixLyricsFromResults,
+                            onMixLyricsFromResultsChange = { mixLyricsFromResults = it },
                         )
                     }
                 }
@@ -205,7 +237,7 @@ fun MainPage() {
                     selectedIndex = { selectedTab },
                     onSelected = { selectedTab = it },
                     backdrop = null,
-                    tabsCount = 2,
+                    tabsCount = 3,
                     mode = FloatingBottomBarMode.None,
                 ) {
                     FloatingBottomBarItem(
@@ -218,6 +250,14 @@ fun MainPage() {
                     }
                     FloatingBottomBarItem(
                         onClick = { selectedTab = 1 },
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Music,
+                            contentDescription = stringResource(R.string.tag_editor),
+                        )
+                    }
+                    FloatingBottomBarItem(
+                        onClick = { selectedTab = 2 },
                     ) {
                         Icon(
                             imageVector = MiuixIcons.Settings,
