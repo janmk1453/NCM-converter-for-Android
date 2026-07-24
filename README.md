@@ -11,6 +11,8 @@
 
 ## 构建
 
+发行版中提供较新的签名安卓版（仅arm64-v8a）
+
 ```bash
 ./gradlew assembleRelease
 ```
