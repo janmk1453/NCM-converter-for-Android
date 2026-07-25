@@ -13,3 +13,8 @@
     public static int d(...);
     public static int i(...);
 }
+
+# jaudiotagger — Android 上没有的 AWT 类
+-dontwarn java.awt.image.BufferedImage
+-dontwarn javax.imageio.ImageIO
+-dontwarn javax.imageio.stream.ImageInputStream

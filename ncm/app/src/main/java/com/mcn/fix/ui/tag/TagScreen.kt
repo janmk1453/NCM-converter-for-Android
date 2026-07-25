@@ -27,13 +27,16 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -46,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -57,6 +61,8 @@ import androidx.documentfile.provider.DocumentFile
 import com.mcn.fix.R
 import com.mcn.fix.data.tag.AudioFileEntry
 import com.mcn.fix.data.tag.AudioTagInfo
+import com.mcn.fix.data.tag.AutoFillLogEntry
+import com.mcn.fix.data.tag.TagPresenceInfo
 import com.mcn.fix.data.tag.TagReaderWriter
 import com.mcn.fix.data.tag.TagSearchApi
 import com.mcn.fix.data.tag.TagSearchResult
@@ -117,26 +123,24 @@ data class AutoFillProgress(
     val startTime: Long = 0L,
 )
 
-private data class TagPresenceInfo(
-    val hasArtist: Boolean = false,
-    val hasAlbum: Boolean = false,
-    val hasLyrics: Boolean = false,
-)
-
 @Composable
 fun TagScreen(
     contentPadding: PaddingValues,
     autoFillPureMusic: Boolean = true,
     autoFillConcurrency: Int = 4,
-    mixLyricsFromResults: Boolean = true,
+    mixLyricsFromResults: Boolean = false,
     tagAudioFiles: MutableList<AudioFileEntry> = mutableListOf(),
     tagScanVersion: Int = 0,
     onTagScanVersionChange: (Int) -> Unit = {},
+    autoFillLogs: MutableList<AutoFillLogEntry> = mutableListOf(),
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var editingIndex by remember { mutableIntStateOf(-1) }
+    var originalTagInfo by remember { mutableStateOf<AudioTagInfo?>(null) }
+    var refreshVersion by remember { mutableIntStateOf(0) }
+    var isRefreshing by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<TagSearchResult>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
@@ -176,19 +180,31 @@ fun TagScreen(
     var scanVersion by remember { mutableIntStateOf(tagScanVersion) }
     var tagInfo by remember { mutableStateOf(AudioTagInfo()) }
 
-    LaunchedEffect(audioFiles.toList(), scanVersion) {
+    LaunchedEffect(audioFiles.toList(), scanVersion, refreshVersion) {
         fileMetadataCache.clear()
-        for (entry in audioFiles) {
-            launch(Dispatchers.IO) {
-                try {
-                    val info = TagReaderWriter.readTags(context, Uri.parse(entry.uri), entry.name)
-                    fileMetadataCache[entry.uri] = TagPresenceInfo(
-                        hasArtist = info.artist.isNotBlank(),
-                        hasAlbum = info.album.isNotBlank(),
-                        hasLyrics = info.lyrics.isNotBlank(),
-                    )
-                } catch (_: Exception) { }
-            }
+        coverCache.clear()
+        val batchSize = 6
+        audioFiles.chunked(batchSize).forEach { chunk ->
+            chunk.map { entry ->
+                async(Dispatchers.IO) {
+                    try {
+                        val (presence, cover) = TagReaderWriter.readPresenceAndCover(context, Uri.parse(entry.uri))
+                        fileMetadataCache[entry.uri] = presence
+                        coverCache[entry.uri] = cover
+                        if (presence.hasLyrics.not()) {
+                            val info = TagReaderWriter.readTags(context, Uri.parse(entry.uri), entry.name)
+                            fileMetadataCache[entry.uri] = TagPresenceInfo(
+                                hasArtist = info.artist.isNotBlank(),
+                                hasAlbum = info.album.isNotBlank(),
+                                hasLyrics = info.lyrics.isNotBlank(),
+                            )
+                            if (coverCache[entry.uri] == null && info.coverData != null) {
+                                coverCache[entry.uri] = info.coverData
+                            }
+                        }
+                    } catch (_: Exception) { }
+                }
+            }.let { deferredList -> deferredList.forEach { it.await() } }
         }
     }
 
@@ -206,17 +222,26 @@ fun TagScreen(
         val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
 
         suspend fun processOne(entry: AudioFileEntry) {
+            fun missingFields(info: AudioTagInfo): List<String> = buildList {
+                if (info.title.isBlank()) add("title")
+                if (info.artist.isBlank()) add("artist")
+                if (info.album.isBlank()) add("album")
+                if (info.coverData == null) add("cover")
+                if (info.lyrics.isBlank()) add("lyrics")
+            }
+            suspend fun addLog(fileName: String, before: List<String>, after: List<String>, status: String, detail: String = "", pureMusic: Boolean = false) {
+                withContext(Dispatchers.Main) {
+                    autoFillLogs.add(AutoFillLogEntry(fileName = fileName, missingBefore = before, missingAfter = after, status = status, detail = detail, pureMusicLyrics = pureMusic))
+                }
+            }
             try {
                 val info = withContext(Dispatchers.IO) {
                     TagReaderWriter.readTags(context, Uri.parse(entry.uri), entry.name)
                 }
-                val hasTitle = info.title.isNotBlank()
-                val hasArtist = info.artist.isNotBlank()
-                val hasAlbum = info.album.isNotBlank()
-                val hasCover = info.coverData != null
-                val hasLyrics = info.lyrics.isNotBlank()
-                if (hasTitle && hasArtist && hasAlbum && hasCover && hasLyrics) {
+                val missingBefore = missingFields(info)
+                if (missingBefore.isEmpty()) {
                     skipCount.incrementAndGet()
+                    addLog(entry.name, emptyList(), emptyList(), "skipped", "已完整")
                     return
                 }
 
@@ -227,39 +252,58 @@ fun TagScreen(
                 val results = try { TagSearchApi.search(query, searchArtist) } catch (_: Exception) { emptyList() }
                 if (results.isEmpty()) {
                     skipCount.incrementAndGet()
+                    addLog(entry.name, missingBefore, missingBefore, "skipped", "在线搜索无结果")
                     return
                 }
 
                 var newInfo = info
-                if (!hasTitle) newInfo = newInfo.copy(title = results.first().title.ifBlank { newInfo.title })
-                if (!hasArtist) newInfo = newInfo.copy(artist = results.first().artist.ifBlank { newInfo.artist })
-                if (!hasAlbum) newInfo = newInfo.copy(album = results.first().album.ifBlank { newInfo.album })
-                if (!hasCover) {
+                if (info.title.isBlank()) newInfo = newInfo.copy(title = results.first().title.ifBlank { newInfo.title })
+                if (info.artist.isBlank()) newInfo = newInfo.copy(artist = results.first().artist.ifBlank { newInfo.artist })
+                if (info.album.isBlank()) newInfo = newInfo.copy(album = results.first().album.ifBlank { newInfo.album })
+                if (info.coverData == null) {
                     results.firstOrNull { it.coverData != null }?.let { r ->
                         newInfo = newInfo.copy(coverData = r.coverData, coverMime = r.coverMime)
                     }
                 }
-                if (!hasLyrics) {
+                var filledPureMusic = false
+                if (info.lyrics.isBlank()) {
                     val lyrics = if (mixLyricsFromResults) {
                         results.firstOrNull { it.lyrics.isNotBlank() }?.lyrics
                     } else {
                         results.firstOrNull()?.lyrics?.takeIf { it.isNotBlank() }
                     } ?: if (autoFillPureMusic) TagSearchApi.PURE_MUSIC_LYRICS else ""
-                    if (lyrics.isNotBlank()) newInfo = newInfo.copy(lyrics = lyrics)
+                    if (lyrics.isNotBlank()) {
+                        newInfo = newInfo.copy(lyrics = lyrics)
+                        if (lyrics == TagSearchApi.PURE_MUSIC_LYRICS) filledPureMusic = true
+                    }
                 }
 
+                val missingAfter = missingFields(newInfo)
                 if (newInfo != info) {
                     val ok = withContext(Dispatchers.IO) {
                         TagReaderWriter.writeTags(context, Uri.parse(entry.uri), entry.name, newInfo)
                     }
                     if (ok) {
                         withContext(Dispatchers.IO) { TagReaderWriter.triggerMediaScan(context, Uri.parse(entry.uri)) }
-                        successCount.incrementAndGet()
+                        if (missingAfter.size < missingBefore.size) {
+                            successCount.incrementAndGet()
+                            addLog(entry.name, missingBefore, missingAfter, "success", "已填充部分字段", filledPureMusic)
+                        } else {
+                            failCount.incrementAndGet()
+                            addLog(entry.name, missingBefore, missingAfter, "failure", "未能填充新字段", filledPureMusic)
+                        }
                     } else {
                         failCount.incrementAndGet()
+                        addLog(entry.name, missingBefore, missingBefore, "failure", "标签写入失败", filledPureMusic)
                     }
                 } else {
-                    skipCount.incrementAndGet()
+                    if (missingAfter.isNotEmpty()) {
+                        failCount.incrementAndGet()
+                        addLog(entry.name, missingBefore, missingAfter, "failure", "在线搜索未找到缺失信息", filledPureMusic)
+                    } else {
+                        skipCount.incrementAndGet()
+                        addLog(entry.name, emptyList(), emptyList(), "skipped", "已完整", filledPureMusic)
+                    }
                 }
             } catch (_: Exception) {
                 failCount.incrementAndGet()
@@ -286,6 +330,7 @@ fun TagScreen(
         }
 
         isAutoFilling = false
+        refreshVersion++
         val updated = successCount.get()
         val msg = if (updated > 0) context.getString(R.string.tag_auto_fill_complete, updated)
                   else context.getString(R.string.tag_auto_fill_skip)
@@ -297,23 +342,38 @@ fun TagScreen(
         isAutoFilling = true
         val startTime = System.currentTimeMillis()
         autoFillProgress = AutoFillProgress(total = files.size, startTime = startTime)
-        val semaphore = kotlinx.coroutines.sync.Semaphore(4)
+        val semaphore = kotlinx.coroutines.sync.Semaphore(autoFillConcurrency)
         val successCount = java.util.concurrent.atomic.AtomicInteger(0)
         val failCount = java.util.concurrent.atomic.AtomicInteger(0)
         val skipCount = java.util.concurrent.atomic.AtomicInteger(0)
         val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
 
         suspend fun processOne(entry: AudioFileEntry) {
+            fun missingIn(fields: Set<String>, info: AudioTagInfo): List<String> = buildList {
+                if ("title" in fields && info.title.isBlank()) add("title")
+                if ("artist" in fields && info.artist.isBlank()) add("artist")
+                if ("album" in fields && info.album.isBlank()) add("album")
+                if ("cover" in fields && info.coverData == null) add("cover")
+                if ("lyrics" in fields && info.lyrics.isBlank()) add("lyrics")
+            }
+            suspend fun addLog(fileName: String, before: List<String>, after: List<String>, status: String, detail: String = "", pureMusic: Boolean = false) {
+                withContext(Dispatchers.Main) {
+                    autoFillLogs.add(AutoFillLogEntry(fileName = fileName, missingBefore = before, missingAfter = after, status = status, detail = detail, pureMusicLyrics = pureMusic))
+                }
+            }
             try {
                 val info = withContext(Dispatchers.IO) {
                     TagReaderWriter.readTags(context, Uri.parse(entry.uri), entry.name)
                 }
+                val missingBefore = missingIn(fields, info)
+                if (missingBefore.isEmpty()) { skipCount.incrementAndGet(); addLog(entry.name, emptyList(), emptyList(), "skipped", "已完整"); return }
+
                 val name = entry.name.substringBeforeLast('.')
                 val (parsedArtist, parsedTitle) = TagSearchApi.parseFileName(entry.name)
                 val query = if (parsedTitle.isNotBlank()) parsedTitle else name
                 val searchArtist = if (parsedArtist.isNotBlank()) parsedArtist else info.artist
                 val results = try { TagSearchApi.search(query, searchArtist) } catch (_: Exception) { emptyList() }
-                if (results.isEmpty()) { skipCount.incrementAndGet(); return }
+                if (results.isEmpty()) { skipCount.incrementAndGet(); addLog(entry.name, missingBefore, missingBefore, "skipped", "在线搜索无结果"); return }
 
                 var newInfo = info
                 if ("title" in fields && info.title.isBlank())
@@ -327,24 +387,46 @@ fun TagScreen(
                         newInfo = newInfo.copy(coverData = r.coverData, coverMime = r.coverMime)
                     }
                 }
+                var filledPureMusic = false
                 if ("lyrics" in fields && info.lyrics.isBlank()) {
                     val lyrics = if (mixLyricsFromResults) {
                         results.firstOrNull { it.lyrics.isNotBlank() }?.lyrics
                     } else {
                         results.firstOrNull()?.lyrics?.takeIf { it.isNotBlank() }
                     } ?: if (autoFillPureMusic) TagSearchApi.PURE_MUSIC_LYRICS else ""
-                    if (lyrics.isNotBlank()) newInfo = newInfo.copy(lyrics = lyrics)
+                    if (lyrics.isNotBlank()) {
+                        newInfo = newInfo.copy(lyrics = lyrics)
+                        if (lyrics == TagSearchApi.PURE_MUSIC_LYRICS) filledPureMusic = true
+                    }
                 }
 
+                val missingAfter = missingIn(fields, newInfo)
                 if (newInfo != info) {
                     val ok = withContext(Dispatchers.IO) {
                         TagReaderWriter.writeTags(context, Uri.parse(entry.uri), entry.name, newInfo)
                     }
                     if (ok) {
                         withContext(Dispatchers.IO) { TagReaderWriter.triggerMediaScan(context, Uri.parse(entry.uri)) }
-                        successCount.incrementAndGet()
-                    } else { failCount.incrementAndGet() }
-                } else { skipCount.incrementAndGet() }
+                        if (missingAfter.size < missingBefore.size) {
+                            successCount.incrementAndGet()
+                            addLog(entry.name, missingBefore, missingAfter, "success", "已填充", filledPureMusic)
+                        } else {
+                            failCount.incrementAndGet()
+                            addLog(entry.name, missingBefore, missingAfter, "failure", "未能填充新字段", filledPureMusic)
+                        }
+                    } else {
+                        failCount.incrementAndGet()
+                        addLog(entry.name, missingBefore, missingBefore, "failure", "标签写入失败", filledPureMusic)
+                    }
+                } else {
+                    if (missingAfter.isNotEmpty()) {
+                        failCount.incrementAndGet()
+                        addLog(entry.name, missingBefore, missingAfter, "failure", "在线搜索未找到缺失信息")
+                    } else {
+                        skipCount.incrementAndGet()
+                        addLog(entry.name, emptyList(), emptyList(), "skipped", "已完整")
+                    }
+                }
             } catch (_: Exception) { failCount.incrementAndGet() }
         }
 
@@ -366,6 +448,7 @@ fun TagScreen(
         }
 
         isAutoFilling = false
+        refreshVersion++
         selectedFiles = emptySet()
         isSelectMode = false
         val updated = successCount.get()
@@ -375,9 +458,11 @@ fun TagScreen(
     }
 
     var batchFields by remember { mutableStateOf(setOf("title", "artist", "album", "cover", "lyrics")) }
+    var batchDeleteFields by remember { mutableStateOf(setOf<String>()) }
 
     BackHandler(enabled = editingIndex >= 0) {
-        if (editingIndex >= 0) showConfirmSave = true
+        if (editingIndex >= 0 && tagInfo != originalTagInfo) showConfirmSave = true
+        else if (editingIndex >= 0) editingIndex = -1
     }
 
     val dirLauncher = rememberLauncherForActivityResult(
@@ -447,6 +532,15 @@ fun TagScreen(
                 fileFilterQuery = fileFilterQuery,
                 isSelectMode = isSelectMode,
                 selectedFiles = selectedFiles,
+                isRefreshing = isRefreshing,
+                onRefresh = {
+                    isRefreshing = true
+                    refreshVersion++
+                    scope.launch {
+                        delay(500)
+                        isRefreshing = false
+                    }
+                },
                 onShowSortDialogChange = { showSortDialog = it },
                 onShowSelectModeDialogChange = { showSelectModeDialog = it },
                 onSortOrderChange = { sortOrder = it },
@@ -454,22 +548,23 @@ fun TagScreen(
                 onSelectDir = { dirLauncher.launch(null) },
                 onSelectionChange = { selectedFiles = it },
                 onSelectModeChange = { isSelectMode = it },
-                onFileClick = { index ->
-                    editingIndex = index
-                    isReading = true
-                    scope.launch {
-                        val entry = audioFiles[index]
-                        val info = withContext(Dispatchers.IO) {
-                            TagReaderWriter.readTags(context, Uri.parse(entry.uri), entry.name)
+                    onFileClick = { index ->
+                        editingIndex = index
+                        isReading = true
+                        scope.launch {
+                            val entry = audioFiles[index]
+                            val info = withContext(Dispatchers.IO) {
+                                TagReaderWriter.readTags(context, Uri.parse(entry.uri), entry.name)
+                            }
+                            tagInfo = info
+                            originalTagInfo = info
+                            val name = entry.name.substringBeforeLast('.')
+                            val (parsedArtist, parsedTitle) = TagSearchApi.parseFileName(entry.name)
+                            searchQuery = if (parsedTitle.isNotBlank()) parsedTitle else name
+                            searchResults = emptyList()
+                            isReading = false
                         }
-                        tagInfo = info
-                        val name = entry.name.substringBeforeLast('.')
-                        val (parsedArtist, parsedTitle) = TagSearchApi.parseFileName(entry.name)
-                        searchQuery = if (parsedTitle.isNotBlank()) parsedTitle else name
-                        searchResults = emptyList()
-                        isReading = false
-                    }
-                },
+                    },
             )
             if (audioFiles.isNotEmpty() && !isSelectMode) {
                 Button(
@@ -494,7 +589,7 @@ fun TagScreen(
                         .align(Alignment.BottomEnd)
                         .padding(end = 16.dp, bottom = 16.dp + contentPadding.calculateBottomPadding()),
                 ) {
-                    Text(stringResource(R.string.tag_batch_fill))
+                    Text(stringResource(R.string.tag_batch_process))
                 }
             }
         } else {
@@ -507,7 +602,10 @@ fun TagScreen(
                 searchQuery = searchQuery,
                 searchResults = searchResults,
                 searchSource = searchSource,
-                onBack = { showConfirmSave = true },
+                onBack = {
+                    if (tagInfo != originalTagInfo) showConfirmSave = true
+                    else editingIndex = -1
+                },
                 onTagInfoChange = { tagInfo = it },
                 onSearchQueryChange = {
                     searchQuery = it
@@ -559,6 +657,7 @@ fun TagScreen(
                             withContext(Dispatchers.IO) {
                                 TagReaderWriter.triggerMediaScan(context, Uri.parse(entry.uri))
                             }
+                            refreshVersion++
                             Toast.makeText(context, context.getString(R.string.tag_save_success), Toast.LENGTH_SHORT).show()
                             editingIndex = -1
                         } else {
@@ -591,20 +690,31 @@ fun TagScreen(
                     text = stringResource(R.string.tag_discard),
                     onClick = {
                         showConfirmSave = false
+                        tagInfo = originalTagInfo ?: tagInfo
                         editingIndex = -1
                     },
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(
-                    text = stringResource(R.string.confirm),
+                    text = stringResource(R.string.tag_save),
                     onClick = {
                         showConfirmSave = false
                         scope.launch {
                             val entry = audioFiles[editingIndex]
-                            withContext(Dispatchers.IO) {
+                            isSaving = true
+                            val success = withContext(Dispatchers.IO) {
                                 TagReaderWriter.writeTags(context, Uri.parse(entry.uri), entry.name, tagInfo)
                             }
-                            editingIndex = -1
+                            if (success) {
+                                withContext(Dispatchers.IO) {
+                                    TagReaderWriter.triggerMediaScan(context, Uri.parse(entry.uri))
+                                }
+                                Toast.makeText(context, context.getString(R.string.tag_save_success), Toast.LENGTH_SHORT).show()
+                                editingIndex = -1
+                            } else {
+                                Toast.makeText(context, context.getString(R.string.tag_save_failed), Toast.LENGTH_SHORT).show()
+                            }
+                            isSaving = false
                         }
                     },
                     modifier = Modifier.weight(1f),
@@ -693,7 +803,7 @@ fun TagScreen(
 
     if (showBatchDialog) {
         OverlayDialog(
-            title = stringResource(R.string.tag_batch_fill_title),
+            title = stringResource(R.string.tag_batch_process),
             summary = "",
             show = showBatchDialog,
             onDismissRequest = { showBatchDialog = false },
@@ -735,6 +845,37 @@ fun TagScreen(
                     }
                 }
                 Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = MiuixTheme.colorScheme.dividerLine.copy(alpha = 0.3f))
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.tag_batch_delete_title),
+                    style = MiuixTheme.textStyles.body1,
+                    color = MiuixTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(8.dp))
+                fieldLabels.forEach { (key, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                batchDeleteFields = if (key in batchDeleteFields) batchDeleteFields - key
+                                else batchDeleteFields + key
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            state = if (key in batchDeleteFields) ToggleableState.On else ToggleableState.Off,
+                            onClick = {
+                                batchDeleteFields = if (key in batchDeleteFields) batchDeleteFields - key
+                                else batchDeleteFields + key
+                            },
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(text = label, style = MiuixTheme.textStyles.body1, color = MiuixTheme.colorScheme.onSurface)
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -745,10 +886,26 @@ fun TagScreen(
                         modifier = Modifier.weight(1f),
                     )
                     TextButton(
-                        text = stringResource(R.string.tag_auto_fill),
+                        text = stringResource(R.string.tag_batch_process),
                         onClick = {
                             showBatchDialog = false
-                            scope.launch { runBatchFill(batchFields) }
+                            scope.launch {
+                                if (batchFields.isNotEmpty()) runBatchFill(batchFields)
+                                if (batchDeleteFields.isNotEmpty()) {
+                                    val files = audioFiles.filter { it.uri in selectedFiles }
+                                    for (entry in files) {
+                                        try {
+                                            withContext(Dispatchers.IO) {
+                                                TagReaderWriter.deleteFields(context, Uri.parse(entry.uri), entry.name, batchDeleteFields)
+                                            }
+                                            withContext(Dispatchers.IO) { TagReaderWriter.triggerMediaScan(context, Uri.parse(entry.uri)) }
+                                        } catch (_: Exception) {}
+                                    }
+                                    selectedFiles = emptySet()
+                                    isSelectMode = false
+                                    refreshVersion++
+                                }
+                            }
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.textButtonColorsPrimary(),
@@ -772,6 +929,8 @@ private fun TagFileListView(
     fileFilterQuery: String,
     isSelectMode: Boolean,
     selectedFiles: Set<String>,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
     onShowSortDialogChange: (Boolean) -> Unit,
     onShowSelectModeDialogChange: (Boolean) -> Unit,
     onSortOrderChange: (TagSortOrder) -> Unit,
@@ -912,40 +1071,92 @@ private fun TagFileListView(
                 )
             }
         } else {
-            LazyColumn(
+            val listState = rememberLazyListState()
+            var pullDistance by remember { mutableFloatStateOf(0f) }
+            val pullThreshold = 80f
+
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .overScrollVertical()
-                    .padding(bottom = contentPadding.calculateBottomPadding())
-                    .padding(horizontal = 12.dp),
-            ) {
-                item {
-                    SmallTitle(
-                        text = stringResource(R.string.tag_file_list, audioFiles.size),
-                        insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp),
-                    )
-                }
-
-                itemsIndexed(
-                    items = displayList,
-                    key = { _, file -> file.uri },
-                ) { index, file ->
-                    val isSelected = file.uri in selectedFiles
-                    CardSegment(
-                        isFirst = index == 0,
-                        isLast = index == displayList.lastIndex,
-                        insidePadding = 0.dp,
-                    ) {
-                        ArrowPreference(
-                            title = file.name,
-                            summary = buildString {
-                                append(file.format.uppercase())
-                                fileMetadataCache[file.uri]?.let { presence ->
-                                    if (presence.hasArtist) append("  ·")
-                                    if (presence.hasAlbum) append("  ⊞")
-                                    if (presence.hasLyrics) append("  ♪")
+                    .pointerInput(isRefreshing) {
+                        if (isRefreshing) return@pointerInput
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                if (pullDistance >= pullThreshold) {
+                                    pullDistance = 0f
+                                    onRefresh()
+                                } else {
+                                    pullDistance = 0f
                                 }
                             },
+                            onVerticalDrag = { change, dragAmount ->
+                                if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset <= 0) {
+                                    pullDistance = (pullDistance + dragAmount * 0.5f).coerceAtLeast(0f)
+                                    change.consume()
+                                }
+                            },
+                        )
+                    },
+            ) {
+                if (pullDistance > 0f || isRefreshing) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter)
+                            .padding(top = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isRefreshing) {
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.5f)
+                                    .height(3.dp),
+                            )
+                        } else {
+                            Text(
+                                text = "↓",
+                                style = MiuixTheme.textStyles.body2,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            )
+                        }
+                    }
+                }
+
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .overScrollVertical()
+                        .padding(bottom = contentPadding.calculateBottomPadding())
+                        .padding(horizontal = 12.dp),
+                ) {
+                    item {
+                        SmallTitle(
+                            text = stringResource(R.string.tag_file_list, audioFiles.size),
+                            insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp),
+                        )
+                    }
+
+                    itemsIndexed(
+                        items = displayList,
+                        key = { _, file -> file.uri },
+                    ) { index, file ->
+                        val isSelected = file.uri in selectedFiles
+                        CardSegment(
+                            isFirst = index == 0,
+                            isLast = index == displayList.lastIndex,
+                            insidePadding = 0.dp,
+                        ) {
+                            ArrowPreference(
+                                title = file.name,
+                                summary = buildString {
+                                    append(file.format.uppercase())
+                                    fileMetadataCache[file.uri]?.let { presence ->
+                                        if (presence.hasArtist) append("  ·")
+                                        if (presence.hasAlbum) append("  ⊞")
+                                        if (presence.hasLyrics) append("  ♪")
+                                    }
+                                },
                             startAction = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (isSelectMode) {
@@ -983,6 +1194,8 @@ private fun TagFileListView(
             }
         }
     }
+}
+
 }
 
 @Composable
@@ -1057,81 +1270,75 @@ private fun TagEditorView(
                 }
 
                 item {
-                    CardSegment(isFirst = true, isLast = false, insidePadding = 0.dp) {
-                        InputField(
-                            query = tagInfo.title,
-                            onQueryChange = { onTagInfoChange(tagInfo.copy(title = it)) },
-                            onSearch = { _ -> },
-                            expanded = false,
-                            onExpandedChange = {},
-                            label = stringResource(R.string.tag_title),
-                        )
-                    }
+                    InputField(
+                        query = tagInfo.title,
+                        onQueryChange = { onTagInfoChange(tagInfo.copy(title = it)) },
+                        onSearch = { _ -> },
+                        expanded = false,
+                        onExpandedChange = {},
+                        label = stringResource(R.string.tag_title),
+                        modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                    )
                 }
 
                 item {
-                    CardSegment(isFirst = false, isLast = false, insidePadding = 0.dp) {
-                        InputField(
-                            query = tagInfo.artist,
-                            onQueryChange = { onTagInfoChange(tagInfo.copy(artist = it)) },
-                            onSearch = { _ -> },
-                            expanded = false,
-                            onExpandedChange = {},
-                            label = stringResource(R.string.tag_artist),
-                        )
-                    }
+                    InputField(
+                        query = tagInfo.artist,
+                        onQueryChange = { onTagInfoChange(tagInfo.copy(artist = it)) },
+                        onSearch = { _ -> },
+                        expanded = false,
+                        onExpandedChange = {},
+                        label = stringResource(R.string.tag_artist),
+                        modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                    )
                 }
 
                 item {
-                    CardSegment(isFirst = false, isLast = false, insidePadding = 0.dp) {
-                        InputField(
-                            query = tagInfo.album,
-                            onQueryChange = { onTagInfoChange(tagInfo.copy(album = it)) },
-                            onSearch = { _ -> },
-                            expanded = false,
-                            onExpandedChange = {},
-                            label = stringResource(R.string.tag_album),
-                        )
-                    }
+                    InputField(
+                        query = tagInfo.album,
+                        onQueryChange = { onTagInfoChange(tagInfo.copy(album = it)) },
+                        onSearch = { _ -> },
+                        expanded = false,
+                        onExpandedChange = {},
+                        label = stringResource(R.string.tag_album),
+                        modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                    )
                 }
 
                 item {
-                    CardSegment(isFirst = false, isLast = false, insidePadding = 0.dp) {
-                        InputField(
-                            query = tagInfo.genre,
-                            onQueryChange = { onTagInfoChange(tagInfo.copy(genre = it)) },
-                            onSearch = { _ -> },
-                            expanded = false,
-                            onExpandedChange = {},
-                            label = stringResource(R.string.tag_genre),
-                        )
-                    }
+                    InputField(
+                        query = tagInfo.genre,
+                        onQueryChange = { onTagInfoChange(tagInfo.copy(genre = it)) },
+                        onSearch = { _ -> },
+                        expanded = false,
+                        onExpandedChange = {},
+                        label = stringResource(R.string.tag_genre),
+                        modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                    )
                 }
 
                 item {
-                    CardSegment(isFirst = false, isLast = false, insidePadding = 0.dp) {
-                        InputField(
-                            query = tagInfo.year,
-                            onQueryChange = { onTagInfoChange(tagInfo.copy(year = it)) },
-                            onSearch = { _ -> },
-                            expanded = false,
-                            onExpandedChange = {},
-                            label = stringResource(R.string.tag_year),
-                        )
-                    }
+                    InputField(
+                        query = tagInfo.year,
+                        onQueryChange = { onTagInfoChange(tagInfo.copy(year = it)) },
+                        onSearch = { _ -> },
+                        expanded = false,
+                        onExpandedChange = {},
+                        label = stringResource(R.string.tag_year),
+                        modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                    )
                 }
 
                 item {
-                    CardSegment(isFirst = false, isLast = true, insidePadding = 0.dp) {
-                        InputField(
-                            query = tagInfo.trackNumber,
-                            onQueryChange = { onTagInfoChange(tagInfo.copy(trackNumber = it)) },
-                            onSearch = { _ -> },
-                            expanded = false,
-                            onExpandedChange = {},
-                            label = stringResource(R.string.tag_track_number),
-                        )
-                    }
+                    InputField(
+                        query = tagInfo.trackNumber,
+                        onQueryChange = { onTagInfoChange(tagInfo.copy(trackNumber = it)) },
+                        onSearch = { _ -> },
+                        expanded = false,
+                        onExpandedChange = {},
+                        label = stringResource(R.string.tag_track_number),
+                        modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                    )
                 }
 
                 item {

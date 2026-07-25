@@ -90,6 +90,45 @@ object TagReaderWriter {
         }
     }
 
+    fun readPresenceAndCover(context: Context, uri: Uri): Pair<TagPresenceInfo, ByteArray?> {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: ""
+            val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: ""
+            val cover = retriever.embeddedPicture
+            TagPresenceInfo(
+                hasArtist = artist.isNotBlank(),
+                hasAlbum = album.isNotBlank(),
+                hasLyrics = false,
+            ) to cover
+        } catch (_: Exception) {
+            TagPresenceInfo() to null
+        } finally {
+            try { retriever.release() } catch (_: Exception) {}
+        }
+    }
+
+    fun deleteFields(context: Context, uri: Uri, fileName: String, fields: Set<String>): Boolean {
+        val tempFile = copyToCache(context, uri, fileName)
+        try {
+            val audioFile = AudioFileIO.read(tempFile)
+            val tag = audioFile.tag ?: return false
+            if ("title" in fields) tag.deleteField(FieldKey.TITLE)
+            if ("artist" in fields) tag.deleteField(FieldKey.ARTIST)
+            if ("album" in fields) tag.deleteField(FieldKey.ALBUM)
+            if ("genre" in fields) tag.deleteField(FieldKey.GENRE)
+            if ("year" in fields) tag.deleteField(FieldKey.YEAR)
+            if ("track" in fields) tag.deleteField(FieldKey.TRACK)
+            if ("cover" in fields) tag.deleteArtworkField()
+            if ("lyrics" in fields) tag.deleteField(FieldKey.LYRICS)
+            AudioFileIO.write(audioFile)
+            writeBackFromCache(context, uri, tempFile)
+            return true
+        } catch (_: Exception) { return false }
+        finally { tempFile.delete() }
+    }
+
     fun triggerMediaScan(context: Context, uri: Uri) {
         val path = uri.path
         if (path != null) {

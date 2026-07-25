@@ -59,7 +59,7 @@ fun AboutScreen(
     onBack: () -> Unit = {},
     predictiveBackEnabled: Boolean = false,
 ) {
-    BackHandler(enabled = predictiveBackEnabled, onBack = onBack)
+    BackHandler(enabled = true, onBack = onBack)
 
     val scrollBehavior = MiuixScrollBehavior()
     val listState = rememberLazyListState()

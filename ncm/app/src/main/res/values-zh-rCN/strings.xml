@@ -110,4 +110,13 @@
     <string name="tag_batch_fill_title">批量填充标签</string>
     <string name="tag_batch_fill_fields">填充字段:</string>
     <string name="tag_filter_hint">过滤文件名…</string>
+    <string name="tag_auto_fill_log">自动填充日志</string>
+    <string name="tag_auto_fill_log_empty">暂无日志</string>
+    <string name="tag_auto_fill_log_clear">清除日志</string>
+    <string name="tag_auto_fill_log_cleared">日志已清除</string>
+    <string name="tag_auto_fill_log_missing">缺失: %s</string>
+    <string name="tag_auto_fill_log_pure_music">纯音乐歌词</string>
+    <string name="tag_batch_process">批量处理</string>
+    <string name="tag_batch_delete_title">批量删除字段</string>
+    <string name="tag_batch_delete">删除</string>
 </resources>

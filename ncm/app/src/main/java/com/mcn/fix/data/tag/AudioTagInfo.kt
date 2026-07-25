@@ -60,10 +60,26 @@ data class AudioTagInfo(
     }
 }
 
+data class TagPresenceInfo(
+    val hasArtist: Boolean = false,
+    val hasAlbum: Boolean = false,
+    val hasLyrics: Boolean = false,
+)
+
 data class AudioFileEntry(
     val uri: String,
     val name: String,
     val size: Long,
     val format: String,
     val lastModified: Long = 0,
+)
+
+data class AutoFillLogEntry(
+    val timestamp: Long = System.currentTimeMillis(),
+    val fileName: String,
+    val missingBefore: List<String> = emptyList(),
+    val missingAfter: List<String> = emptyList(),
+    val status: String = "skipped",
+    val detail: String = "",
+    val pureMusicLyrics: Boolean = false,
 )

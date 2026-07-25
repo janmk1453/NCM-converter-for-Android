@@ -110,4 +110,13 @@
     <string name="tag_batch_fill_title">Batch fill tags</string>
     <string name="tag_batch_fill_fields">Fields to fill:</string>
     <string name="tag_filter_hint">Filter file names…</string>
+    <string name="tag_auto_fill_log">Auto-fill Log</string>
+    <string name="tag_auto_fill_log_empty">No logs yet</string>
+    <string name="tag_auto_fill_log_clear">Clear logs</string>
+    <string name="tag_auto_fill_log_cleared">Logs cleared</string>
+    <string name="tag_auto_fill_log_missing">Missing: %s</string>
+    <string name="tag_auto_fill_log_pure_music">Pure music lyrics</string>
+    <string name="tag_batch_process">Batch Process</string>
+    <string name="tag_batch_delete_title">Batch delete fields</string>
+    <string name="tag_batch_delete">Delete</string>
 </resources>

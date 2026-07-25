@@ -6,7 +6,7 @@
 
 - **UI**: Miuix KMP 0.9.3 + JetBrains Compose Multiplatform 1.11.1。**严禁自建 UI**，所有界面一律使用 Miuix 提供的组件（`top.yukonga.miuix.kmp.*`）。
 - **构建**: AGP 8.13.2, Kotlin 2.4.0, compileSdk=37, minSdk=33
-- **结构**: `app/` 为唯一模块；入口 `MainActivity.kt` → `McnConverterTheme` → `MainPage`（两 Tab: Home + Settings）
+- **结构**: `app/` 为唯一模块；入口 `MainActivity.kt` → `McnConverterTheme` → `MainPage`（三 Tab: Home + Tags + Settings）
 
 ## 项目结构
 
@@ -20,9 +20,13 @@ ncm/
 │   │   └── NcmStreamCipher.kt   #  RC4 流加密实现
 │   ├── data/
 │   │   ├── DecryptManager.kt     #  批量解密状态管理（Flow）
-│   │   └── model/
-│   │       ├── NcmFileInfo.kt    #  文件信息数据类
-│   │       └── NcmMetadata.kt    #  元数据（封面、歌词等）
+│   │   ├── model/
+│   │   │   ├── NcmFileInfo.kt    #  文件信息数据类
+│   │   │   └── NcmMetadata.kt    #  元数据（封面、歌词等）
+│   │   └── tag/                  #  标签编辑器数据层
+│   │       ├── AudioTagInfo.kt   #  标签数据类 + AudioFileEntry
+│   │       ├── TagReaderWriter.kt#  读写音频标签（jaudiotagger + MediaMetadataRetriever）
+│   │       └── TagSearchApi.kt   #  在线搜索（网易云 QQ 双源）+ 文件名解析
 │   ├── util/
 │   │   └── FileUtils.kt          #  文件系统工具（SAF 遍历 NCM 等）
 │   └── ui/
@@ -30,11 +34,13 @@ ncm/
 │       │   ├── Theme.kt          #  Miuix 主题配置
 │       │   └── StatusColors.kt   #  语义色 token
 │       ├── navigation/
-│       │   └── AppNavigation.kt  #  导航 + MainPage + HomeState
+│       │   └── AppNavigation.kt  #  导航 + MainPage + HomeState（三 Tab）
 │       ├── screen/
 │       │   ├── HomeScreen.kt     #  主页面（文件列表、解密按钮）
-│       │   ├── SettingsScreen.kt #  设置页
+│       │   ├── SettingsScreen.kt #  设置页（含标签设置区域）
 │       │   └── AboutScreen.kt    #  关于页
+│       ├── tag/                  #  标签编辑器 UI
+│       │   └── TagScreen.kt      #  文件列表 + 编辑界面 + 搜索 + 自动/批量填充
 │       └── component/
 │           ├── AdaptiveTopAppBar.kt  #  宽屏自适应顶栏
 │           ├── BlurredBar.kt         #  毛玻璃包裹
@@ -52,11 +58,17 @@ ncm/
 ## 已知陷阱
 
 - **`gradle.properties` 非常规设置**：`android.suppressUnsupportedCompileSdk=37`、`android.disableAarMetadataCheck=true`、`android.overridePathCheck=true`。编译 SDK 37 是预览版，需这些标志抑制错误。
+- **全局变量命名用驼峰**：项目代码中 UI 状态用驼峰命名（如 `deleteAfterDecrypt`），但字符串 key 用下划线（如 `"delete_after_decrypt"`），这是 SharedPreferences 的惯例，不要混在代码变量名里。
 - **元数据覆盖**：解密输出所有格式都保留封面、标题、艺术家、专辑信息。MP3 写 ID3v2，FLAC 写 Vorbis Comment + 封面，M4A 写 iTunes ilst 原子。OGG/WAV 保持原始数据不变。
-- **禁止擅自提交/推送**：没有用户明确要求，不得执行任何 `git commit`、`git push`、提交代码或同步远程仓库的操作。
 - **扫描卡死**：`HomeScreen.kt` 中 `sourceDirLauncher` 回调先设 `isLoadingFiles = true` 再更新 `homeState.sourceDirUri`。选择相同目录时 `sourceDirUri` 值不变，`LaunchedEffect` 不重启，`isLoadingFiles` 永远卡在 `true`。已在 `HomeState` 中添加 `scanVersion` 计数器解决，每次选择目录递增，`LaunchedEffect` 双键依赖确保重扫。
 - **删除源文件不生效**：`HomeScreen.kt:476` 删除逻辑中 `homeState.fileList.find { it.path == result.fileName }`，`info.path` 是完整 URI，`result.fileName` 只是裸文件名，永远不匹配。需用 `result.path`（完整 URI）比较。已在最新代码中修复。
-- **全局变量命名用驼峰**：项目代码中 UI 状态用驼峰命名（如 `deleteAfterDecrypt`），但字符串 key 用下划线（如 `"delete_after_decrypt"`），这是 SharedPreferences 的惯例，不要混在代码变量名里。
+- **TagScreen 文件列表状态**：`tagAudioFiles` 和 `tagScanVersion` 提升到 `MainPage`（`AppNavigation.kt`）以跨越 Tab 切换保持。`remember` 而非 `rememberSaveable`，因为 `AudioFileEntry` 不可序列化。
+- **TagScreen 封面缓存**：`coverCache = remember { LinkedHashMap<String, ByteArray?>(128, 0.75f, true) }` 在 `TagScreen` 级别创建，传递给 `FileCoverThumbnail` 避免列表滚动时每项重复创建 `MediaMetadataRetriever`。
+- **元数据标识**：`TagPresenceInfo` 缓存通过 `mutableStateMapOf` 存放到 `TagScreen` 级别；`LaunchedEffect(audioFiles.toList(), scanVersion)` 在后台并发读取标签，使用 `TagReaderWriter.readTags()`（全标签读取，含歌词）。
+- **MIUIX Checkbox**：`top.yukonga.miuix.kmp.basic.Checkbox` 使用 `state: ToggleableState`（而非 `checked: Boolean`）和 `onClick: (() -> Unit)?`（而非 `onCheckedChange`）。
+- **`buildAnnotatedString` 不可用于 ArrowPreference.summary**：该参数类型为 `String?`，需用普通字符串拼接。
+- **双源搜索**：`TagSearchApi.search()` 始终查询网易云和 QQ 音乐两个来源，结果去重。`Source` 枚举控制是否过滤来源。
+- **`parseFileName` 分隔符**：支持 ` - `、` — `、` – `、`·`、`・`。
 
 ## UI 惯例
 

@@ -44,6 +44,7 @@ fun SettingsScreen(
     themeMode: Int,
     onThemeModeChange: (Int) -> Unit,
     onNavigateToAbout: () -> Unit,
+    onNavigateToAutoFillLog: () -> Unit = {},
     rememberLastDir: Boolean,
     onRememberLastDirChange: (Boolean) -> Unit,
     concurrency: Int = 4,
@@ -61,7 +62,7 @@ fun SettingsScreen(
     onAutoFillPureMusicChange: (Boolean) -> Unit = {},
     autoFillConcurrency: Int = 4,
     onAutoFillConcurrencyChange: (Int) -> Unit = {},
-    mixLyricsFromResults: Boolean = true,
+    mixLyricsFromResults: Boolean = false,
     onMixLyricsFromResultsChange: (Boolean) -> Unit = {},
 ) {
 
@@ -256,6 +257,12 @@ fun SettingsScreen(
                             onValueChange = { onAutoFillConcurrencyChange(it.toInt()) },
                         )
                     },
+                    CardItem("log") {
+                        ArrowPreference(
+                            title = stringResource(R.string.tag_auto_fill_log),
+                            onClick = onNavigateToAutoFillLog,
+                        )
+                    },
                 ),
                 outerBottomPadding = 12.dp,
             )
@@ -273,9 +280,13 @@ fun SettingsScreen(
                     isLast = true,
                     insidePadding = 0.dp,
                 ) {
+                    val ctx = LocalContext.current
+                    val versionName = remember(ctx) {
+                        runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0) }.getOrNull()?.versionName ?: "1.0.0"
+                    }
                     ArrowPreference(
                         title = stringResource(R.string.version),
-                        summary = stringResource(R.string.version_value),
+                        summary = versionName,
                         onClick = onNavigateToAbout,
                     )
                 }

@@ -1,5 +1,7 @@
 package com.mcn.fix.data.tag
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -70,7 +72,7 @@ object TagSearchApi {
                     addResults(try { searchQQMusic(q, a, maxResults = 10) } catch (_: Exception) { emptyList() })
             }
 
-            allResults
+            allResults.sortedBy { if (it.source == "网易云") 0 else 1 }
         }
 
     private fun searchNetease(query: String, artist: String, maxResults: Int = 15): List<TagSearchResult> {
@@ -229,7 +231,22 @@ object TagSearchApi {
             }
             input.close()
             conn.disconnect()
-            output.toByteArray()
+            val raw = output.toByteArray()
+            if (raw.size > 512 * 1024) {
+                val bmp = BitmapFactory.decodeByteArray(raw, 0, raw.size) ?: return raw
+                val maxSize = 1000
+                val scale = minOf(maxSize.toFloat() / bmp.width, maxSize.toFloat() / bmp.height, 1f)
+                if (scale < 1f) {
+                    val scaled = Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true)
+                    val out = ByteArrayOutputStream()
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                    scaled.recycle()
+                    bmp.recycle()
+                    return out.toByteArray()
+                }
+                bmp.recycle()
+            }
+            raw
         } catch (_: Exception) { null }
     }
 }
