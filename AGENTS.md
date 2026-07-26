@@ -6,6 +6,7 @@
 
 - **UI**: Miuix KMP 0.9.3 + JetBrains Compose Multiplatform 1.11.1。**严禁自建 UI**，所有界面一律使用 Miuix 提供的组件（`top.yukonga.miuix.kmp.*`）。
 - **构建**: AGP 8.13.2, Kotlin 2.4.0, compileSdk=37, minSdk=33
+- **版本**: 1.1.2 (versionCode=5)
 - **结构**: `app/` 为唯一模块；入口 `MainActivity.kt` → `McnConverterTheme` → `MainPage`（三 Tab: Home + Tags + Settings）
 
 ## 项目结构
@@ -28,7 +29,8 @@ ncm/
 │   │       ├── TagReaderWriter.kt#  读写音频标签（jaudiotagger + MediaMetadataRetriever）
 │   │       └── TagSearchApi.kt   #  在线搜索（网易云 QQ 双源）+ 文件名解析
 │   ├── util/
-│   │   └── FileUtils.kt          #  文件系统工具（SAF 遍历 NCM 等）
+│   │   ├── FileUtils.kt          #  文件系统工具（SAF 遍历 NCM 等）
+│   │   └── FairMemoryManager.kt  #  小米公平运行内存机制适配（监听 itgsa.intent.action.TRIM 广播、Binder 回调）
 │   └── ui/
 │       ├── theme/
 │       │   ├── Theme.kt          #  Miuix 主题配置
@@ -41,10 +43,19 @@ ncm/
 │       │   └── AboutScreen.kt    #  关于页
 │       ├── tag/                  #  标签编辑器 UI
 │       │   └── TagScreen.kt      #  文件列表 + 编辑界面 + 搜索 + 自动/批量填充
-│       └── component/
-│           ├── AdaptiveTopAppBar.kt  #  宽屏自适应顶栏
-│           ├── BlurredBar.kt         #  毛玻璃包裹
-│           └── WideContentBox.kt     #  宽屏内容居中
+│       ├── component/
+│       │   ├── AdaptiveTopAppBar.kt  #  宽屏自适应顶栏
+│       │   ├── BlurredBar.kt         #  毛玻璃包裹
+│       │   ├── WideContentBox.kt     #  宽屏内容居中
+│       │   ├── GroupedCardItems.kt   #  CardSegment 卡片分组容器
+│       │   └── FloatingBottomBar.kt  #  悬浮药丸底部导航栏
+│       ├── liquid/
+│       │   ├── InnerShadow.kt        #  内阴影 Modifier
+│       │   ├── LiquidGlass.kt        #  玻璃拟态特效（vibrancy/lens）
+│       │   └── CombinedBackdrop.kt   #  复合 Backdrop 效果
+│       └── interaction/
+│           ├── DragGestureInspector.kt  #  自定义拖拽手势检测
+│           └── DampedDragAnimation.kt   #  阻尼拖拽动画
 ├── res/                          # Android 资源（strings.xml 等）
 └── AndroidManifest.xml
 ```
@@ -69,6 +80,7 @@ ncm/
 - **`buildAnnotatedString` 不可用于 ArrowPreference.summary**：该参数类型为 `String?`，需用普通字符串拼接。
 - **双源搜索**：`TagSearchApi.search()` 始终查询网易云和 QQ 音乐两个来源，结果去重。`Source` 枚举控制是否过滤来源。
 - **`parseFileName` 分隔符**：支持 ` - `、` — `、` – `、`·`、`・`。
+- **版本号不同步**：`res/values/strings.xml` 和 `res/values-zh-rCN/strings.xml` 中的 `version_value` 字符串需在版本更新时手工同步，否则关于页显示的版本号会与 `build.gradle.kts` 中的 `versionName` 不一致。
 
 ## UI 惯例
 

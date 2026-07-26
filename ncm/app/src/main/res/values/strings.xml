@@ -20,7 +20,7 @@
     <string name="concurrency">Concurrency</string>
     <string name="about">About</string>
     <string name="version">Version</string>
-    <string name="version_value">1.0.0</string>
+    <string name="version_value">1.1.2</string>
     <string name="decrypt_complete">Decryption complete</string>
     <string name="confirm_delete">Delete source files after decryption?</string>
     <string name="cancel">Cancel</string>
